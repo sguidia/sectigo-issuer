@@ -1,0 +1,13 @@
+apiVersion: v2
+name: sectigo-issuer
+description: A cert-manager external issuer for Sectigo Certificate Manager REST API
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/guidise/sectigo-issuer
+keywords:
+  - cert-manager
+  - sectigo
+  - certificate
+  - issuer
+  - tls

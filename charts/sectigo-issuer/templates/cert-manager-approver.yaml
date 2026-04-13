@@ -1,0 +1,33 @@
+# ClusterRole granting cert-manager's internal approver permission to approve
+# CertificateRequests referencing sectigo.opensource.io issuers
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "sectigo-issuer.fullname" . }}-cert-manager-approve
+  labels:
+    {{- include "sectigo-issuer.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - cert-manager.io
+    resources:
+      - signers
+    verbs:
+      - approve
+    resourceNames:
+      - sectigoissuers.sectigo.opensource.io/*
+      - sectigoclusterissuers.sectigo.opensource.io/*
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "sectigo-issuer.fullname" . }}-cert-manager-approve
+  labels:
+    {{- include "sectigo-issuer.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "sectigo-issuer.fullname" . }}-cert-manager-approve
+subjects:
+  - kind: ServiceAccount
+    name: cert-manager
+    namespace: cert-manager
