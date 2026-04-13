@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	issuerapi "github.com/cert-manager/issuer-lib/api/v1alpha1"
 	"github.com/cert-manager/issuer-lib/controllers"
 	"github.com/cert-manager/issuer-lib/controllers/signer"
@@ -261,15 +262,16 @@ func (o *Issuer) Sign(ctx context.Context, cr signer.CertificateRequestObject, i
 
 // patchAnnotation persists a single annotation on the underlying Kubernetes
 // resource (CertificateRequest) via a MergePatch. This ensures the annotation
-// survives across Sign() retries.
+// survives across Sign() retries. We construct a minimal CertificateRequest
+// object with just the name/namespace to avoid scheme registration issues
+// with the issuer-lib wrapper type.
 func (o *Issuer) patchAnnotation(ctx context.Context, cr signer.CertificateRequestObject, key, value string) error {
 	patch := []byte(fmt.Sprintf(`{"metadata":{"annotations":{%q:%q}}}`, key, value))
 
-	// Extract the underlying client.Object from the CertificateRequestObject.
-	obj, ok := cr.(client.Object)
-	if !ok {
-		return fmt.Errorf("CertificateRequestObject does not implement client.Object")
-	}
+	// Build a minimal typed object that the client can serialize.
+	obj := &cmapi.CertificateRequest{}
+	obj.Name = cr.GetName()
+	obj.Namespace = cr.GetNamespace()
 
 	return o.client.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch))
 }
