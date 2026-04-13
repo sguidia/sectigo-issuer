@@ -7,7 +7,7 @@ import (
 
 	"github.com/cert-manager/issuer-lib/controllers/signer"
 
-	sectigoissuerapi "github.com/guidise/sectigo-issuer/api/v1alpha1"
+	sectigoissuerapi "github.com/sguidia/sectigo-issuer/api/v1alpha1"
 )
 
 func TestClientFromSpecAndSecret_MissingClientID(t *testing.T) {

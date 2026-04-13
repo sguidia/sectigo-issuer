@@ -14,7 +14,7 @@ A Kubernetes [cert-manager](https://cert-manager.io/) external issuer that autom
 ### 1. Install the controller
 
 ```bash
-helm install sectigo-issuer oci://ghcr.io/guidise/sectigo-issuer/charts/sectigo-issuer \
+helm install sectigo-issuer oci://ghcr.io/sguidia/sectigo-issuer/charts/sectigo-issuer \
   --namespace sectigo-issuer-system \
   --create-namespace
 ```

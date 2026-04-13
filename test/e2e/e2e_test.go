@@ -27,7 +27,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/guidise/sectigo-issuer/test/utils"
+	"github.com/sguidia/sectigo-issuer/test/utils"
 )
 
 // namespace where the project is deployed in

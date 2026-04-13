@@ -33,8 +33,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	sectigoissuerapi "github.com/guidise/sectigo-issuer/api/v1alpha1"
-	"github.com/guidise/sectigo-issuer/internal/sectigo"
+	sectigoissuerapi "github.com/sguidia/sectigo-issuer/api/v1alpha1"
+	"github.com/sguidia/sectigo-issuer/internal/sectigo"
 )
 
 const (

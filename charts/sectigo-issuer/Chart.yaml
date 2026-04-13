@@ -4,7 +4,7 @@ description: A cert-manager external issuer for Sectigo Certificate Manager REST
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-home: https://github.com/guidise/sectigo-issuer
+home: https://github.com/sguidia/sectigo-issuer
 keywords:
   - cert-manager
   - sectigo

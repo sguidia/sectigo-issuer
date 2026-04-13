@@ -42,10 +42,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/guidise/sectigo-issuer/internal/controllers"
-	"github.com/guidise/sectigo-issuer/internal/version"
+	"github.com/sguidia/sectigo-issuer/internal/controllers"
+	"github.com/sguidia/sectigo-issuer/internal/version"
 
-	sectigoissuerv1alpha1 "github.com/guidise/sectigo-issuer/api/v1alpha1"
+	sectigoissuerv1alpha1 "github.com/sguidia/sectigo-issuer/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

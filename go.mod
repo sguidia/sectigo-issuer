@@ -1,4 +1,4 @@
-module github.com/guidise/sectigo-issuer
+module github.com/sguidia/sectigo-issuer
 
 go 1.25.0
 

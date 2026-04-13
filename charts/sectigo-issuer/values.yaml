@@ -3,7 +3,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/guidise/sectigo-issuer
+  repository: ghcr.io/sguidia/sectigo-issuer
   tag: ""  # Defaults to appVersion
   pullPolicy: IfNotPresent
 
