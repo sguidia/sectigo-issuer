@@ -6,7 +6,7 @@ domain: opensource.io
 layout:
 - go.kubebuilder.io/v4
 projectName: sectigo-issuer
-repo: github.com/guidise/sectigo-issuer
+repo: github.com/sguidia/sectigo-issuer
 resources:
 - api:
     crdVersion: v1
@@ -14,13 +14,13 @@ resources:
   domain: opensource.io
   group: sectigo
   kind: SectigoIssuer
-  path: github.com/guidise/sectigo-issuer/api/v1alpha1
+  path: github.com/sguidia/sectigo-issuer/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
   domain: opensource.io
   group: sectigo
   kind: SectigoClusterIssuer
-  path: github.com/guidise/sectigo-issuer/api/v1alpha1
+  path: github.com/sguidia/sectigo-issuer/api/v1alpha1
   version: v1alpha1
 version: "3"
