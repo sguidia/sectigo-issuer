@@ -37,8 +37,13 @@ type SectigoClusterIssuer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   IssuerSpec            `json:"spec,omitempty"`
+	Spec   SectigoIssuerSpec     `json:"spec,omitempty"`
 	Status v1alpha1.IssuerStatus `json:"status,omitempty"`
+}
+
+// GetSpec returns the issuer spec for generic access by the controller.
+func (vi *SectigoClusterIssuer) GetSpec() *SectigoIssuerSpec {
+	return &vi.Spec
 }
 
 func (vi *SectigoClusterIssuer) GetConditions() []metav1.Condition {

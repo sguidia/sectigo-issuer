@@ -36,22 +36,44 @@ type SectigoIssuer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   IssuerSpec            `json:"spec,omitempty"`
+	Spec   SectigoIssuerSpec     `json:"spec,omitempty"`
 	Status v1alpha1.IssuerStatus `json:"status,omitempty"`
 }
 
-// IssuerSpec defines the desired state of SectigoIssuer
-type IssuerSpec struct {
-	// URL is the base URL for the endpoint of the signing service,
-	// for example: "https://sample-signer.example.com/api".
+// GetSpec returns the issuer spec for generic access by the controller.
+func (vi *SectigoIssuer) GetSpec() *SectigoIssuerSpec {
+	return &vi.Spec
+}
+
+// SectigoIssuerSpec defines the desired state of SectigoIssuer and SectigoClusterIssuer.
+type SectigoIssuerSpec struct {
+	// URL is the base URL of the Sectigo API.
+	// +kubebuilder:default="https://admin.enterprise.sectigo.com/api"
 	URL string `json:"url"`
 
-	// A reference to a Secret in the same namespace as the referent. If the
-	// referent is a SectigoClusterIssuer, the reference instead refers to the resource
-	// with the given name in the configured 'cluster resource namespace', which
-	// is set as a flag on the controller component (and defaults to the
-	// namespace that the controller runs in).
+	// CustomerURI is the Sectigo customer URI identifier.
+	CustomerURI string `json:"customerUri"`
+
+	// AuthSecretName is the name of a Secret containing client-id and client-secret keys.
+	// For a SectigoClusterIssuer, the Secret is looked up in the configured
+	// cluster resource namespace (defaults to the controller's namespace).
 	AuthSecretName string `json:"authSecretName"`
+
+	// TokenURL is the OAuth2 token endpoint.
+	// +kubebuilder:default="https://auth.sso.sectigo.com/auth/realms/apiclients/protocol/openid-connect/token"
+	// +optional
+	TokenURL string `json:"tokenUrl,omitempty"`
+
+	// OrganizationID is the Sectigo organization ID for certificate requests.
+	OrganizationID int `json:"organizationId"`
+
+	// CertificateType is the Sectigo certificate profile ID.
+	// +kubebuilder:default=31466
+	CertificateType int `json:"certificateType"`
+
+	// Term is the certificate validity in days.
+	// +kubebuilder:default=365
+	Term int `json:"term"`
 }
 
 func (vi *SectigoIssuer) GetConditions() []metav1.Condition {

@@ -48,13 +48,13 @@ type HealthChecker interface {
 	Check() error
 }
 
-type HealthCheckerBuilder func(*sectigoissuerapi.IssuerSpec, map[string][]byte) (HealthChecker, error)
+type HealthCheckerBuilder func(*sectigoissuerapi.SectigoIssuerSpec, map[string][]byte) (HealthChecker, error)
 
 type Signer interface {
 	Sign(*x509.Certificate) ([]byte, error)
 }
 
-type SignerBuilder func(*sectigoissuerapi.IssuerSpec, map[string][]byte) (Signer, error)
+type SignerBuilder func(*sectigoissuerapi.SectigoIssuerSpec, map[string][]byte) (Signer, error)
 
 type Issuer struct {
 	HealthCheckerBuilder     HealthCheckerBuilder
@@ -90,7 +90,7 @@ func (s Issuer) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	}).SetupWithManager(ctx, mgr)
 }
 
-func (o *Issuer) getIssuerDetails(issuerObject issuerapi.Issuer) (*sectigoissuerapi.IssuerSpec, string, error) {
+func (o *Issuer) getIssuerDetails(issuerObject issuerapi.Issuer) (*sectigoissuerapi.SectigoIssuerSpec, string, error) {
 	switch t := issuerObject.(type) {
 	case *sectigoissuerapi.SectigoIssuer:
 		return &t.Spec, issuerObject.GetNamespace(), nil
@@ -105,7 +105,7 @@ func (o *Issuer) getIssuerDetails(issuerObject issuerapi.Issuer) (*sectigoissuer
 	}
 }
 
-func (o *Issuer) getSecretData(ctx context.Context, issuerSpec *sectigoissuerapi.IssuerSpec, namespace string) (map[string][]byte, error) {
+func (o *Issuer) getSecretData(ctx context.Context, issuerSpec *sectigoissuerapi.SectigoIssuerSpec, namespace string) (map[string][]byte, error) {
 	secretName := types.NamespacedName{
 		Namespace: namespace,
 		Name:      issuerSpec.AuthSecretName,

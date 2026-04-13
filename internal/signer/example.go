@@ -27,11 +27,11 @@ import (
 	"github.com/guidise/sectigo-issuer/internal/controllers"
 )
 
-func ExampleHealthCheckerFromIssuerAndSecretData(*sectigoissuerapi.IssuerSpec, map[string][]byte) (controllers.HealthChecker, error) {
+func ExampleHealthCheckerFromIssuerAndSecretData(*sectigoissuerapi.SectigoIssuerSpec, map[string][]byte) (controllers.HealthChecker, error) {
 	return &exampleSigner{}, nil
 }
 
-func ExampleSignerFromIssuerAndSecretData(*sectigoissuerapi.IssuerSpec, map[string][]byte) (controllers.Signer, error) {
+func ExampleSignerFromIssuerAndSecretData(*sectigoissuerapi.SectigoIssuerSpec, map[string][]byte) (controllers.Signer, error) {
 	return &exampleSigner{}, nil
 }
 

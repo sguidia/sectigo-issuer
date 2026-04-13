@@ -60,23 +60,44 @@ spec:
           metadata:
             type: object
           spec:
-            description: IssuerSpec defines the desired state of SectigoIssuer
+            description: SectigoIssuerSpec defines the desired state of SectigoIssuer
+              and SectigoClusterIssuer.
             properties:
               authSecretName:
                 description: |-
-                  A reference to a Secret in the same namespace as the referent. If the
-                  referent is a SectigoClusterIssuer, the reference instead refers to the resource
-                  with the given name in the configured 'cluster resource namespace', which
-                  is set as a flag on the controller component (and defaults to the
-                  namespace that the controller runs in).
+                  AuthSecretName is the name of a Secret containing client-id and client-secret keys.
+                  For a SectigoClusterIssuer, the Secret is looked up in the configured
+                  cluster resource namespace (defaults to the controller's namespace).
+                type: string
+              certificateType:
+                default: 31466
+                description: CertificateType is the Sectigo certificate profile ID.
+                type: integer
+              customerUri:
+                description: CustomerURI is the Sectigo customer URI identifier.
+                type: string
+              organizationId:
+                description: OrganizationID is the Sectigo organization ID for certificate
+                  requests.
+                type: integer
+              term:
+                default: 365
+                description: Term is the certificate validity in days.
+                type: integer
+              tokenUrl:
+                default: https://auth.sso.sectigo.com/auth/realms/apiclients/protocol/openid-connect/token
+                description: TokenURL is the OAuth2 token endpoint.
                 type: string
               url:
-                description: |-
-                  URL is the base URL for the endpoint of the signing service,
-                  for example: "https://sample-signer.example.com/api".
+                default: https://admin.enterprise.sectigo.com/api
+                description: URL is the base URL of the Sectigo API.
                 type: string
             required:
             - authSecretName
+            - certificateType
+            - customerUri
+            - organizationId
+            - term
             - url
             type: object
           status:
