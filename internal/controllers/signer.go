@@ -61,7 +61,7 @@ type Issuer struct {
 // +kubebuilder:rbac:groups=sectigo.opensource.io,resources=sectigoclusterissuers/status;sectigoissuers/status,verbs=patch
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
-// +kubebuilder:rbac:groups=cert-manager.io,resources=certificaterequests,verbs=get;list;watch
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificaterequests,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificaterequests/status,verbs=patch
 // +kubebuilder:rbac:groups=certificates.k8s.io,resources=certificatesigningrequests,verbs=get;list;watch
 // +kubebuilder:rbac:groups=certificates.k8s.io,resources=certificatesigningrequests/status,verbs=patch
@@ -249,15 +249,29 @@ func (o *Issuer) Sign(ctx context.Context, cr signer.CertificateRequestObject, i
 		return signer.PEMBundle{}, fmt.Errorf("sectigo enroll failed: %w", err)
 	}
 
-	// Store the SSL ID in an annotation for subsequent retries.
-	if annotations == nil {
-		annotations = make(map[string]string)
+	// Persist the SSL ID annotation directly via the Kubernetes API so that
+	// subsequent Sign() retries can skip enrollment and go straight to Collect().
+	if err := o.patchAnnotation(ctx, cr, annotationSSLID, strconv.Itoa(enrollResp.SSLID)); err != nil {
+		return signer.PEMBundle{}, fmt.Errorf("failed to persist ssl-id annotation: %w", err)
 	}
-	annotations[annotationSSLID] = strconv.Itoa(enrollResp.SSLID)
-	cr.SetAnnotations(annotations)
 
 	// Try to collect immediately -- the certificate might already be ready.
 	return collectCertificate(ctx, sectigoClient, enrollResp.SSLID)
+}
+
+// patchAnnotation persists a single annotation on the underlying Kubernetes
+// resource (CertificateRequest) via a MergePatch. This ensures the annotation
+// survives across Sign() retries.
+func (o *Issuer) patchAnnotation(ctx context.Context, cr signer.CertificateRequestObject, key, value string) error {
+	patch := []byte(fmt.Sprintf(`{"metadata":{"annotations":{%q:%q}}}`, key, value))
+
+	// Extract the underlying client.Object from the CertificateRequestObject.
+	obj, ok := cr.(client.Object)
+	if !ok {
+		return fmt.Errorf("CertificateRequestObject does not implement client.Object")
+	}
+
+	return o.client.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch))
 }
 
 // collectCertificate attempts to retrieve the issued certificate from Sectigo.
