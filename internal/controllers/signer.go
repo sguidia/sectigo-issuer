@@ -252,8 +252,12 @@ func (o *Issuer) Sign(ctx context.Context, cr signer.CertificateRequestObject, i
 
 	// Persist the SSL ID annotation directly via the Kubernetes API so that
 	// subsequent Sign() retries can skip enrollment and go straight to Collect().
+	// CRITICAL: if this fails, we MUST return PermanentError to prevent retries
+	// from creating duplicate certificates in Sectigo.
 	if err := o.patchAnnotation(ctx, cr, annotationSSLID, strconv.Itoa(enrollResp.SSLID)); err != nil {
-		return signer.PEMBundle{}, fmt.Errorf("failed to persist ssl-id annotation: %w", err)
+		return signer.PEMBundle{}, signer.PermanentError{
+			Err: fmt.Errorf("CRITICAL: enroll succeeded (sslId=%d) but failed to persist annotation — manual intervention required: %w", enrollResp.SSLID, err),
+		}
 	}
 
 	// Try to collect immediately -- the certificate might already be ready.
