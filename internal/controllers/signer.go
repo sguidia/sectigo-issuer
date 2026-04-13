@@ -19,11 +19,12 @@ package controllers
 import (
 	"context"
 	"crypto/x509"
-	"errors"
+	"encoding/pem"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/cert-manager/cert-manager/pkg/util/pki"
 	issuerapi "github.com/cert-manager/issuer-lib/api/v1alpha1"
 	"github.com/cert-manager/issuer-lib/controllers"
 	"github.com/cert-manager/issuer-lib/controllers/signer"
@@ -33,32 +34,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	sectigoissuerapi "github.com/guidise/sectigo-issuer/api/v1alpha1"
+	"github.com/guidise/sectigo-issuer/internal/sectigo"
 )
 
-var (
-	errGetAuthSecret        = errors.New("failed to get Secret containing Issuer credentials")
-	errHealthCheckerBuilder = errors.New("failed to build the healthchecker")
-	errHealthCheckerCheck   = errors.New("healthcheck failed")
+const (
+	// annotationSSLID is stored on the CertificateRequest to persist the
+	// Sectigo SSL ID between Sign() retries while the certificate is being
+	// issued asynchronously.
+	annotationSSLID = "sectigo.opensource.io/ssl-id"
 
-	errSignerBuilder = errors.New("failed to build the signer")
-	errSignerSign    = errors.New("failed to sign")
+	// secretKeyClientID and secretKeyClientSecret are the expected keys
+	// inside the Kubernetes Secret referenced by AuthSecretName.
+	secretKeyClientID     = "client-id"
+	secretKeyClientSecret = "client-secret"
 )
 
-type HealthChecker interface {
-	Check() error
-}
-
-type HealthCheckerBuilder func(*sectigoissuerapi.SectigoIssuerSpec, map[string][]byte) (HealthChecker, error)
-
-type Signer interface {
-	Sign(*x509.Certificate) ([]byte, error)
-}
-
-type SignerBuilder func(*sectigoissuerapi.SectigoIssuerSpec, map[string][]byte) (Signer, error)
-
+// Issuer bridges cert-manager with the Sectigo Certificate Manager API.
+// It implements the issuer-lib Sign and Check callbacks.
 type Issuer struct {
-	HealthCheckerBuilder     HealthCheckerBuilder
-	SignerBuilder            SignerBuilder
 	ClusterResourceNamespace string
 
 	client client.Client
@@ -90,6 +83,8 @@ func (s Issuer) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	}).SetupWithManager(ctx, mgr)
 }
 
+// getIssuerDetails extracts the spec and the namespace where the auth secret
+// should be looked up.
 func (o *Issuer) getIssuerDetails(issuerObject issuerapi.Issuer) (*sectigoissuerapi.SectigoIssuerSpec, string, error) {
 	switch t := issuerObject.(type) {
 	case *sectigoissuerapi.SectigoIssuer:
@@ -97,14 +92,13 @@ func (o *Issuer) getIssuerDetails(issuerObject issuerapi.Issuer) (*sectigoissuer
 	case *sectigoissuerapi.SectigoClusterIssuer:
 		return &t.Spec, o.ClusterResourceNamespace, nil
 	default:
-		// A permanent error will cause the Issuer to not retry until the
-		// Issuer is updated.
 		return nil, "", signer.PermanentError{
 			Err: fmt.Errorf("unexpected issuer type: %t", issuerObject),
 		}
 	}
 }
 
+// getSecretData fetches the Kubernetes Secret referenced by the issuer spec.
 func (o *Issuer) getSecretData(ctx context.Context, issuerSpec *sectigoissuerapi.SectigoIssuerSpec, namespace string) (map[string][]byte, error) {
 	secretName := types.NamespacedName{
 		Namespace: namespace,
@@ -113,80 +107,203 @@ func (o *Issuer) getSecretData(ctx context.Context, issuerSpec *sectigoissuerapi
 
 	var secret corev1.Secret
 	if err := o.client.Get(ctx, secretName, &secret); err != nil {
-		return nil, fmt.Errorf("%w, secret name: %s, reason: %v", errGetAuthSecret, secretName, err)
-	}
-
-	checker, err := o.HealthCheckerBuilder(issuerSpec, secret.Data)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errHealthCheckerBuilder, err)
-	}
-
-	if err := checker.Check(); err != nil {
-		return nil, fmt.Errorf("%w: %v", errHealthCheckerCheck, err)
+		return nil, fmt.Errorf("failed to get Secret %s: %w", secretName, err)
 	}
 
 	return secret.Data, nil
 }
 
-// Check checks that the CA it is available. Certificate requests will not be
-// processed until this check passes.
+// clientFromSpecAndSecret constructs a Sectigo API client from the issuer spec
+// and the raw secret data. It returns a PermanentError when the secret does
+// not contain the required keys.
+func clientFromSpecAndSecret(spec *sectigoissuerapi.SectigoIssuerSpec, secretData map[string][]byte) (*sectigo.Client, error) {
+	clientID, ok := secretData[secretKeyClientID]
+	if !ok || len(clientID) == 0 {
+		return nil, signer.PermanentError{
+			Err: fmt.Errorf("secret missing required key %q", secretKeyClientID),
+		}
+	}
+
+	clientSecret, ok := secretData[secretKeyClientSecret]
+	if !ok || len(clientSecret) == 0 {
+		return nil, signer.PermanentError{
+			Err: fmt.Errorf("secret missing required key %q", secretKeyClientSecret),
+		}
+	}
+
+	return sectigo.NewClient(
+		spec.URL,
+		spec.TokenURL,
+		string(clientID),
+		string(clientSecret),
+	), nil
+}
+
+// Check validates that the issuer is properly configured and that a Sectigo
+// client can be constructed from the spec and secret data. Certificate
+// requests will not be processed until this check passes.
 func (o *Issuer) Check(ctx context.Context, issuerObject issuerapi.Issuer) error {
 	issuerSpec, namespace, err := o.getIssuerDetails(issuerObject)
 	if err != nil {
 		return err
 	}
 
-	_, err = o.getSecretData(ctx, issuerSpec, namespace)
-	return err
+	secretData, err := o.getSecretData(ctx, issuerSpec, namespace)
+	if err != nil {
+		return err
+	}
+
+	// Validate that we can construct a client (i.e. required secret keys exist).
+	if _, err := clientFromSpecAndSecret(issuerSpec, secretData); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-// Sign returns a signed certificate for the supplied CertificateRequestObject (a cert-manager CertificateRequest resource or
-// a kubernetes CertificateSigningRequest resource). The CertificateRequestObject contains a GetRequest method that returns
-// a certificate template that can be used as a starting point for the generated certificate.
-// The Sign method should return a PEMBundle containing the signed certificate and any intermediate certificates (see the PEMBundle docs for more information).
-// If the Sign method returns an error, the issuance will be retried until the MaxRetryDuration is reached.
-// Special errors and cases can be found in the issuer-lib README: https://github.com/cert-manager/issuer-lib/tree/main?tab=readme-ov-file#how-it-works
+// Sign issues a certificate via the Sectigo API for the given
+// CertificateRequest. The flow is asynchronous:
+//
+//  1. On the first call (no ssl-id annotation), the CSR is submitted to
+//     Sectigo via Enroll(). The returned SSL ID is stored in an annotation
+//     so subsequent retries can skip enrollment.
+//
+//  2. On subsequent calls (ssl-id annotation present), Collect() is called
+//     to check whether the certificate is ready. If Sectigo returns a
+//     NotReadyError, Sign returns a PendingError so issuer-lib retries later.
+//
+//  3. Once Collect() succeeds, the PEM chain is returned in a PEMBundle.
 func (o *Issuer) Sign(ctx context.Context, cr signer.CertificateRequestObject, issuerObject issuerapi.Issuer) (signer.PEMBundle, error) {
 	issuerSpec, namespace, err := o.getIssuerDetails(issuerObject)
 	if err != nil {
-		// Returning an IssuerError will change the status of the Issuer to Failed too.
-		return signer.PEMBundle{}, signer.IssuerError{
-			Err: err,
-		}
+		return signer.PEMBundle{}, signer.IssuerError{Err: err}
 	}
 
 	secretData, err := o.getSecretData(ctx, issuerSpec, namespace)
 	if err != nil {
-		// Returning an IssuerError will change the status of the Issuer to Failed too.
-		return signer.PEMBundle{}, signer.IssuerError{
-			Err: err,
+		return signer.PEMBundle{}, signer.IssuerError{Err: err}
+	}
+
+	sectigoClient, err := clientFromSpecAndSecret(issuerSpec, secretData)
+	if err != nil {
+		return signer.PEMBundle{}, signer.IssuerError{Err: err}
+	}
+
+	// Check if we already have a Sectigo SSL ID from a previous attempt.
+	annotations := cr.GetAnnotations()
+	sslIDStr := ""
+	if annotations != nil {
+		sslIDStr = annotations[annotationSSLID]
+	}
+
+	if sslIDStr != "" {
+		// We have already enrolled -- try to collect the certificate.
+		sslID, err := strconv.Atoi(sslIDStr)
+		if err != nil {
+			return signer.PEMBundle{}, signer.PermanentError{
+				Err: fmt.Errorf("invalid %s annotation value %q: %w", annotationSSLID, sslIDStr, err),
+			}
+		}
+
+		return collectCertificate(ctx, sectigoClient, sslID)
+	}
+
+	// First call -- enroll the CSR with Sectigo.
+	certDetails, err := cr.GetCertificateDetails()
+	if err != nil {
+		return signer.PEMBundle{}, signer.PermanentError{
+			Err: fmt.Errorf("failed to get certificate details: %w", err),
 		}
 	}
 
-	certDetails, err := cr.GetCertificateDetails()
+	csrPEM := certDetails.CSR
+	csrDER, err := extractCSRFromPEM(csrPEM)
 	if err != nil {
-		return signer.PEMBundle{}, err
+		return signer.PEMBundle{}, signer.PermanentError{
+			Err: fmt.Errorf("failed to parse CSR PEM: %w", err),
+		}
 	}
 
-	certTemplate, err := certDetails.CertificateTemplate()
+	parsedCSR, err := x509.ParseCertificateRequest(csrDER)
 	if err != nil {
-		return signer.PEMBundle{}, err
+		return signer.PEMBundle{}, signer.PermanentError{
+			Err: fmt.Errorf("failed to parse CSR DER: %w", err),
+		}
 	}
 
-	signerObj, err := o.SignerBuilder(issuerSpec, secretData)
-	if err != nil {
-		return signer.PEMBundle{}, fmt.Errorf("%w: %v", errSignerBuilder, err)
+	// Build the subject alternative names list for the Sectigo API.
+	sans := buildSANs(parsedCSR)
+
+	enrollReq := sectigo.EnrollRequest{
+		OrgID:    issuerSpec.OrganizationID,
+		CSR:      string(csrPEM),
+		CertType: issuerSpec.CertificateType,
+		Term:     issuerSpec.Term,
+	}
+	if sans != "" {
+		enrollReq.SubjAltNames = sans
 	}
 
-	signed, err := signerObj.Sign(certTemplate)
+	enrollResp, err := sectigoClient.Enroll(ctx, enrollReq)
 	if err != nil {
-		return signer.PEMBundle{}, fmt.Errorf("%w: %v", errSignerSign, err)
+		return signer.PEMBundle{}, fmt.Errorf("sectigo enroll failed: %w", err)
 	}
 
-	bundle, err := pki.ParseSingleCertificateChainPEM(signed)
+	// Store the SSL ID in an annotation for subsequent retries.
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations[annotationSSLID] = strconv.Itoa(enrollResp.SSLID)
+	cr.SetAnnotations(annotations)
+
+	// Try to collect immediately -- the certificate might already be ready.
+	return collectCertificate(ctx, sectigoClient, enrollResp.SSLID)
+}
+
+// collectCertificate attempts to retrieve the issued certificate from Sectigo.
+// If the certificate is not yet ready, it returns a PendingError to trigger
+// a retry by issuer-lib.
+func collectCertificate(ctx context.Context, c *sectigo.Client, sslID int) (signer.PEMBundle, error) {
+	pemData, err := c.Collect(ctx, sslID)
 	if err != nil {
-		return signer.PEMBundle{}, err
+		if sectigo.IsNotReadyError(err) {
+			return signer.PEMBundle{}, signer.PendingError{
+				Err:          fmt.Errorf("certificate sslId=%d not ready yet, will retry", sslID),
+				RequeueAfter: 10 * time.Second,
+			}
+		}
+		return signer.PEMBundle{}, fmt.Errorf("sectigo collect failed for sslId=%d: %w", sslID, err)
 	}
 
-	return signer.PEMBundle(bundle), nil
+	return signer.PEMBundle{
+		ChainPEM: pemData,
+	}, nil
+}
+
+// extractCSRFromPEM decodes the first PEM block from the given data and
+// returns the raw DER bytes. Returns an error if no CERTIFICATE REQUEST
+// block is found.
+func extractCSRFromPEM(pemBytes []byte) ([]byte, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, fmt.Errorf("no PEM data found")
+	}
+	if block.Type != "CERTIFICATE REQUEST" && block.Type != "NEW CERTIFICATE REQUEST" {
+		return nil, fmt.Errorf("unexpected PEM block type %q, expected CERTIFICATE REQUEST", block.Type)
+	}
+	return block.Bytes, nil
+}
+
+// buildSANs extracts DNS names and IP addresses from the parsed CSR and
+// returns them as a comma-separated string suitable for the Sectigo API
+// SubjAltNames field.
+func buildSANs(csr *x509.CertificateRequest) string {
+	var sans []string
+	for _, dns := range csr.DNSNames {
+		sans = append(sans, dns)
+	}
+	for _, ip := range csr.IPAddresses {
+		sans = append(sans, ip.String())
+	}
+	return strings.Join(sans, ",")
 }

@@ -43,7 +43,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/guidise/sectigo-issuer/internal/controllers"
-	"github.com/guidise/sectigo-issuer/internal/signer"
 	"github.com/guidise/sectigo-issuer/internal/version"
 
 	sectigoissuerv1alpha1 "github.com/guidise/sectigo-issuer/api/v1alpha1"
@@ -248,8 +247,6 @@ func main() {
 	defer cancel()
 
 	if err = (&controllers.Issuer{
-		HealthCheckerBuilder:     signer.ExampleHealthCheckerFromIssuerAndSecretData,
-		SignerBuilder:            signer.ExampleSignerFromIssuerAndSecretData,
 		ClusterResourceNamespace: clusterResourceNamespace,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create Signer controllers")
