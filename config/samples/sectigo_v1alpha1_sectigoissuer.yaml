@@ -1,0 +1,10 @@
+apiVersion: sectigo.opensource.io/v1alpha1
+kind: SectigoIssuer
+metadata:
+  labels:
+    app.kubernetes.io/name: sectigo-issuer
+    app.kubernetes.io/managed-by: kustomize
+  name: sectigoissuer-sample
+spec:
+  authSecretName: "sectigoissuer-sample-credentials"
+  url: "http://sectigo.opensource.io/api/v1"
