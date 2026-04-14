@@ -176,3 +176,29 @@ func TestIsNotReadyError_Nil(t *testing.T) {
 		t.Error("expected false for nil error")
 	}
 }
+
+func TestReversePEMChain(t *testing.T) {
+	root := "-----BEGIN CERTIFICATE-----\nROOT\n-----END CERTIFICATE-----"
+	inter := "-----BEGIN CERTIFICATE-----\nINTER\n-----END CERTIFICATE-----"
+	leaf := "-----BEGIN CERTIFICATE-----\nLEAF\n-----END CERTIFICATE-----"
+
+	chain := []byte(root + "\n" + inter + "\n" + leaf + "\n")
+	reversed := reversePEMChain(chain)
+
+	result := string(reversed)
+	leafIdx := strings.Index(result, "LEAF")
+	interIdx := strings.Index(result, "INTER")
+	rootIdx := strings.Index(result, "ROOT")
+
+	if leafIdx > interIdx || interIdx > rootIdx {
+		t.Errorf("expected leaf-first order, got:\n%s", result)
+	}
+}
+
+func TestReversePEMChain_SingleCert(t *testing.T) {
+	single := []byte("-----BEGIN CERTIFICATE-----\nONLY\n-----END CERTIFICATE-----\n")
+	reversed := reversePEMChain(single)
+	if !strings.Contains(string(reversed), "ONLY") {
+		t.Error("single cert should be returned as-is")
+	}
+}

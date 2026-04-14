@@ -76,5 +76,41 @@ func (c *Client) Collect(ctx context.Context, sslID int) ([]byte, error) {
 		}
 	}
 
-	return data, nil
+	// Sectigo returns the chain in root-first order, but cert-manager expects
+	// leaf-first. Reverse the PEM blocks so the leaf certificate comes first.
+	return reversePEMChain(data), nil
+}
+
+// reversePEMChain reverses the order of PEM blocks in a certificate chain.
+// Sectigo returns root → intermediates → leaf; cert-manager needs leaf → intermediates → root.
+func reversePEMChain(pemData []byte) []byte {
+	const beginMarker = "-----BEGIN CERTIFICATE-----"
+	const endMarker = "-----END CERTIFICATE-----"
+
+	var blocks [][]byte
+	remaining := pemData
+	for {
+		start := bytes.Index(remaining, []byte(beginMarker))
+		if start == -1 {
+			break
+		}
+		end := bytes.Index(remaining[start:], []byte(endMarker))
+		if end == -1 {
+			break
+		}
+		end += start + len(endMarker)
+		blocks = append(blocks, remaining[start:end])
+		remaining = remaining[end:]
+	}
+
+	if len(blocks) <= 1 {
+		return pemData
+	}
+
+	var result bytes.Buffer
+	for i := len(blocks) - 1; i >= 0; i-- {
+		result.Write(blocks[i])
+		result.WriteByte('\n')
+	}
+	return result.Bytes()
 }
