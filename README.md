@@ -2,6 +2,18 @@
 
 A Kubernetes [cert-manager](https://cert-manager.io/) external issuer that automates TLS certificate lifecycle using the [Sectigo Certificate Manager](https://www.sectigo.com/certificate-manager) (SCM) REST API with OAuth2 authentication.
 
+> ## ⚠️ Early Beta — Use at Your Own Risk
+>
+> This project is in **early beta**. Only basic end-to-end testing has been performed (issuance, renewal, happy paths). A full test plan and broader edge-case coverage are still being developed.
+>
+> Before using this in any environment that matters, you should:
+>
+> - Validate behavior against your own Sectigo configuration and certificate types.
+> - Test failure paths (invalid CSRs, network errors, expired credentials, partial outages).
+> - Review the source code — this is community-maintained, not a vendor-supported product.
+>
+> No SLA, no warranty. Bug reports and pull requests welcome.
+
 ## Prerequisites
 
 - Kubernetes 1.25+
@@ -137,6 +149,7 @@ Use the `id` from the certificate types response as the `certificateType` value 
 
 ## Limitations
 
+- **Beta maturity — limited test coverage.** Only basic end-to-end paths have been validated (issuance, renewal, happy paths). Edge cases, failure modes, and long-running stability have not been hammered. Treat as pre-production until you've validated against your own environment.
 - **Domain Control Validation (DCV) must be pre-configured.** Sectigo requires domain ownership to be validated before certificates can be issued. DCV must be completed out of band (e.g., DNS CNAME or HTTP file) before using this issuer.
 - **Public SSL certificates only.** This issuer uses the `/ssl/v1/enroll` endpoint designed for public SSL/TLS certificates.
 - **No ACME support.** This issuer uses the Sectigo REST API, not the ACME protocol. If you need ACME-based issuance, use cert-manager's built-in ACME issuer instead.
